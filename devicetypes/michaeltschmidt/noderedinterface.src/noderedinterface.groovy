@@ -26,48 +26,55 @@ metadata {
 	simulator {
 		// TODO: define status and reply messages here
 	}
-
-	tiles(scale: 2) {
-        // standard tile with actions named
-   		standardTile("actionFlat", "device.switch", width: 2, height: 2, decoration: "flat") {
-    		state "off", label: '${currentValue}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff"
-    		state "on", label: '${currentValue}', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#00a0dc"
+    
+    preferences{
+        input("deviceIP", "string", title:"IP Address", description: "IP Address", required: true, displayDuringSetup: true)
+        input("devicePort", "string", title:"Port", description: "Port", defaultValue: 1880 , required: true, displayDuringSetup: true)
+        input("uri", "string", title:"NodeRed API Path", description: "/myAPIPath/", displayDuringSetup: true)
+        input("oncmd", "string", title:"NodeRed JSON ON Command", description: "cmd=mycommand&val=myval&etc.", required: true, displayDuringSetup: true)
+        input("offcmd", "string", title:"NodeRed JSON OFF Command", description: "cmd=mycommand&val=myval&etc.", required: true, displayDuringSetup: true)
 	}
-        // value tile (read only)
-        valueTile("status", "device.myattribute", decoration: "flat", width: 6, height: 2) {
-            state "status", label:'${currentValue}'
-        }
+    
+	tiles(scale: 2) {
+		multiAttributeTile(name:"switch", type: "generic", width: 6, height: 4, canChangeIcon: true) {
+    		tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
+        		attributeState "on", label:'${name}', action:"switch.off", icon:"st.lights.philips.hue-single", backgroundColor:"#00a0dc", nextState:"turningOff"
+        		attributeState "off", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
+        		attributeState "turningOn", label:'${name}', action:"switch.off", icon:"st.lights.philips.hue-single", backgroundColor:"#00a0dc", nextState:"turningOff"
+        		attributeState "turningOff", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
+    		}
+            tileAttribute ("device.myattribute", key: "SECONDARY_CONTROL") {
+        		attributeState "default", label:'${currentValue}'
+    		}
+		}
 
-        // the "switch" tile will appear in the Things view
-        main(["actionFlat","status"])
+        main(["switch"])
     }
 }
 
-// parse events into attributes
 def parse(String description) {
     def msg = parseLanMessage(description)
     log.debug msg
     def json = msg.json
-    sendEvent(name: "myattribute",  value: json.cmd, isStateChange: true)
+    sendEvent(name: "myattribute",  value: json.cmd)
 }
 
-// handle commands
 def on() {
 	log.debug "Executing 'on'"
     sendEvent(name: "switch", value: "on", isStateChange: true)
-    myCmd("ON")
+    myCmd(settings['oncmd'])
 }
 
 def off() {
 	log.debug "Executing 'off'"
     sendEvent(name: "switch", value: "off", isStateChange: true)
-    myCmd("OFF")
+    myCmd(settings['offcmd'])
 }
 
 def myCmd(cmd)
 {
-    def host = "192.168.1.100" 
-    def port = "1880"
+    def host = (settings['deviceIP'])
+    def port = (settings['devicePort'])
     def hosthex = convertIPtoHex(host)
     def porthex = convertPortToHex(port)
     device.deviceNetworkId = "$hosthex:$porthex" 
@@ -75,7 +82,7 @@ def myCmd(cmd)
     def headers = [:] 
     headers.put("HOST", "$host:$port")
  	
-    def path = "/test/?cmd=$cmd"
+    def path = "/" + (settings['uri']) + "/?cmd=$cmd"
  
   try {
     def hubAction = new physicalgraph.device.HubAction(
@@ -95,10 +102,10 @@ def myCmd(cmd)
   
 private String convertIPtoHex(ipAddress) { 
     String hex = ipAddress.tokenize( '.' ).collect {  String.format( '%02x', it.toInteger() ) }.join()
-    return hex
+    return hex.toUpperCase()
 }
 
 private String convertPortToHex(port) {
 	String hexport = port.toString().format( '%04x', port.toInteger() )
-    return hexport
+    return hexport.toUpperCase()
 }
